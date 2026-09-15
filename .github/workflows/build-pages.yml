@@ -29,9 +29,24 @@ jobs:
           version: latest
           actions-cache-folder: emsdk-cache
 
+      - name: Prepare Workshop Core
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          git clone --depth 1 \
+            https://github.com/sc-workshop/Workshop-Core.git \
+            workshop-core
+
+          test -f workshop-core/workshop-core/cmake/WkFlatbuffers.cmake
+          test -f workshop-core/workshop-core/cmake/WkArgsparse.cmake
+          test -f workshop-core/workshop-core/cmake/WkJson.cmake
+
       - name: Clone SCTX Converter
         run: |
-          git clone --depth 1 https://github.com/Daniil-SV/SCTX-Converter.git sctx-converter
+          git clone --depth 1 \
+            https://github.com/Daniil-SV/SCTX-Converter.git \
+            sctx-converter
 
       - name: Configure WebAssembly build
         shell: bash
@@ -44,7 +59,8 @@ jobs:
             -S sctx-converter \
             -B build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DSC_TEXTURE_BUILD_CLI=ON
+            -DSC_TEXTURE_BUILD_CLI=ON \
+            -DCMAKE_MODULE_PATH="${GITHUB_WORKSPACE}/workshop-core/workshop-core/cmake"
 
       - name: Generate SCTX FlatBuffers headers
         shell: bash
@@ -57,8 +73,15 @@ jobs:
 
           echo "Generated SCTX headers:"
           find build -type f \
-            \( -name "Header_generated.h" -o -name "MipMapData_generated.h" \) \
+            \( \
+              -name "Header_generated.h" \
+              -o \
+              -name "MipMapData_generated.h" \
+            \) \
             -print
+
+          test "$(find build -type f -name "Header_generated.h" | wc -l)" -gt 0
+          test "$(find build -type f -name "MipMapData_generated.h" | wc -l)" -gt 0
 
       - name: Build SctxConverter
         shell: bash
@@ -79,7 +102,11 @@ jobs:
           mkdir -p site/wasm
 
           find build -type f \
-            \( -name "SctxConverter.js" -o -name "SctxConverter.wasm" \) \
+            \( \
+              -name "SctxConverter.js" \
+              -o \
+              -name "SctxConverter.wasm" \
+            \) \
             -exec cp {} site/wasm/ \;
 
           test -f site/wasm/SctxConverter.js
