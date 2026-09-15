@@ -1,0 +1,122 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f3f4f6;
+  color: #111827;
+  font: 16px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app {
+  width: min(680px, calc(100% - 28px));
+  margin: 32px auto;
+  padding: 24px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 30px #00000012;
+}
+
+h1 {
+  margin: 0 0 20px;
+  font-size: 28px;
+}
+
+h2 {
+  font-size: 18px;
+  margin: 24px 0 10px;
+}
+
+button,
+.file-picker {
+  display: block;
+  width: 100%;
+  padding: 13px 16px;
+  border: 0;
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+}
+
+.file-picker {
+  background: #111827;
+  color: #fff;
+  margin-bottom: 10px;
+}
+
+.file-picker input {
+  display: none;
+}
+
+button {
+  background: #2563eb;
+  color: #fff;
+  margin-bottom: 18px;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.secondary {
+  background: #374151;
+}
+
+.status {
+  padding: 14px 0;
+}
+
+.progress-track {
+  height: 12px;
+  background: #e5e7eb;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+#progress {
+  height: 100%;
+  width: 0;
+  background: #2563eb;
+  transition: width 0.15s;
+}
+
+#counter {
+  margin-top: 9px;
+  font-weight: 700;
+}
+
+#current {
+  margin-top: 4px;
+  color: #4b5563;
+  word-break: break-word;
+}
+
+#log {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+#log li {
+  padding: 9px 10px;
+  margin: 5px 0;
+  background: #f9fafb;
+  border-radius: 8px;
+  word-break: break-word;
+}
+
+.ok {
+  color: #166534;
+}
+
+.err {
+  color: #b91c1c;
+}
+
+.working {
+  color: #1d4ed8;
+}

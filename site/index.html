@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SCTX → PNG</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <main class="app">
+
+    <h1>SCTX → PNG</h1>
+
+    <label class="file-picker">
+      <input id="files" type="file" accept=".sctx" multiple>
+      Select SCTX files
+    </label>
+
+    <button id="convert" disabled>
+      Convert
+    </button>
+
+    <section class="status">
+      <div class="progress-track">
+        <div id="progress"></div>
+      </div>
+
+      <div id="counter">
+        0 / 0
+      </div>
+
+      <div id="current">
+        Ready
+      </div>
+    </section>
+
+    <section>
+      <h2>Files</h2>
+      <ul id="log"></ul>
+    </section>
+
+    <button id="downloadAll" class="secondary" disabled>
+      Download PNGs
+    </button>
+
+  </main>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>
