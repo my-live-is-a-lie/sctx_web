@@ -46,6 +46,7 @@ jobs:
             -DCMAKE_MODULE_PATH="$GITHUB_WORKSPACE/build/_deps/workshopcore-src/workshop-core/cmake" \
             -DWK_PREFERRED_CPU_FEATURES=Default \
             -DANDROID=TRUE \
+            -DANDROID_PLATFORM_LEVEL=24 \
             -DCMAKE_EXE_LINKER_FLAGS="-sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=web -sALLOW_MEMORY_GROWTH=1 -sEXPORTED_RUNTIME_METHODS=['FS','callMain'] -sEXIT_RUNTIME=0"
 
       - name: Build SctxConverter
