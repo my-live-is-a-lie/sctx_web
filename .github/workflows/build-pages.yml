@@ -59,11 +59,12 @@ jobs:
             --target GENERATE_SCTX_API \
             --parallel 2
 
-          HEADER_DIR="$(dirname "$(find build -type f -name 'Header_generated.h' | head -n 1)")"
-          test -n "$HEADER_DIR"
+          HEADER_DIR="$(find build -type d -name 'SCTX_API' | head -n 1)"
+          test -d "$HEADER_DIR"
           mkdir -p build/_deps/supercell-texture-src/supercell-texture/source/texture/SCTX
-          cp "$HEADER_DIR"/*.h \
-            build/_deps/supercell-texture-src/supercell-texture/source/texture/SCTX/
+          find "$HEADER_DIR" -type f -name '*.h' -exec cp {} \
+            build/_deps/supercell-texture-src/supercell-texture/source/texture/SCTX/ \
+            \;
 
           cmake --build build \
             --target SctxConverter \
