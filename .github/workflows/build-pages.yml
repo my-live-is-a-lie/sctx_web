@@ -42,7 +42,7 @@ jobs:
             -S third_party/SCTX-Converter \
             -B build \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_FLAGS="-O3 -I$GITHUB_WORKSPACE/build/_deps/supercell-texture-build/supercell-texture" \
+            -DCMAKE_CXX_FLAGS="-O3 -I$GITHUB_WORKSPACE/build/_deps/supercell-texture-build/supercell-texture/SCTX_API" \
             -DCMAKE_MODULE_PATH="$GITHUB_WORKSPACE/build/_deps/workshopcore-src/workshop-core/cmake" \
             -DWK_PREFERRED_CPU_FEATURES=Default \
             -DANDROID=TRUE \
