@@ -46,11 +46,31 @@ jobs:
             https://github.com/Daniil-SV/SCTX-Converter.git \
             sctx-converter
 
-          test -f workshop-core/workshop-core/cmake/WkFlatbuffers.cmake
-          test -f workshop-core/workshop-core/cmake/WkArgsparse.cmake
+          echo "=== Verify Workshop-Core ==="
 
-          test -f supercell-texture/supercell-texture/sctx_schemas/MipMapData.fbs
-          test -f supercell-texture/supercell-texture/sctx_schemas/Header.fbs
+          test -f \
+            workshop-core/workshop-core/cmake/WkFlatbuffers.cmake
+
+          test -f \
+            workshop-core/workshop-core/cmake/WkArgsparse.cmake
+
+          test -f \
+            workshop-core/workshop-core/cmake/WkJson.cmake
+
+          echo "=== Verify SupercellTexture ==="
+
+          test -f \
+            supercell-texture/supercell-texture/sctx_schemas/MipMapData.fbs
+
+          test -f \
+            supercell-texture/supercell-texture/sctx_schemas/Header.fbs
+
+          echo "=== SCTX schemas ==="
+
+          find supercell-texture/supercell-texture/sctx_schemas \
+            -type f \
+            -name "*.fbs" \
+            -print
 
       - name: Configure WebAssembly build
         shell: bash
@@ -65,43 +85,73 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DSC_TEXTURE_BUILD_CLI=ON \
             -DCMAKE_MODULE_PATH="${GITHUB_WORKSPACE}/workshop-core/workshop-core/cmake" \
-            -DFETCHCONTENT_SOURCE_DIR_SUPERCELL-TEXTURE="${GITHUB_WORKSPACE}/supercell-texture"
+            -DFETCHCONTENT_SOURCE_DIR_SUPERCELL_TEXTURE="${GITHUB_WORKSPACE}/supercell-texture"
 
-      - name: Verify SCTX schemas
+      - name: Inspect configured SCTX paths
         shell: bash
         run: |
           set -euxo pipefail
 
-          echo "SCTX schemas:"
-          find build/_deps/supercell-texture-src \
+          echo "=== Source SCTX schemas ==="
+
+          find supercell-texture/supercell-texture/sctx_schemas \
             -type f \
-            \( -name "*.fbs" \) \
+            -name "*.fbs" \
             -print
 
-          test -f \
-            build/_deps/supercell-texture-src/supercell-texture/sctx_schemas/MipMapData.fbs
+          echo "=== Build directories ==="
 
-          test -f \
-            build/_deps/supercell-texture-src/supercell-texture/sctx_schemas/Header.fbs
+          find build \
+            -maxdepth 5 \
+            -type d \
+            -iname "*supercell*texture*" \
+            -print
 
-      - name: Generate SCTX FlatBuffers
+          echo "=== MipMapData.fbs locations ==="
+
+          find . \
+            -type f \
+            -name "MipMapData.fbs" \
+            -print
+
+          echo "=== Header.fbs locations ==="
+
+          find . \
+            -type f \
+            -name "Header.fbs" \
+            -print
+
+      - name: Debug SCTX FlatBuffers
         shell: bash
         run: |
           set -euxo pipefail
+
+          echo "=== Generated build rules containing MipMapData.fbs ==="
+
+          grep -R -n -A10 -B10 \
+            "MipMapData.fbs" \
+            build/_deps \
+            2>/dev/null \
+            || true
+
+          echo "=== Generate SCTX FlatBuffers ==="
 
           source "$EMSDK/emsdk_env.sh"
 
           cmake --build build \
             --target GENERATE_SCTX_API \
-            --parallel 2
+            --parallel 2 \
+            --verbose
 
       - name: Verify generated headers
         shell: bash
         run: |
           set -euxo pipefail
 
-          echo "Generated headers:"
-          find build -type f \
+          echo "=== Generated headers ==="
+
+          find build \
+            -type f \
             \( \
               -name "Header_generated.h" \
               -o \
@@ -110,6 +160,7 @@ jobs:
             -print
 
           test "$(find build -type f -name "Header_generated.h" | wc -l)" -gt 0
+
           test "$(find build -type f -name "MipMapData_generated.h" | wc -l)" -gt 0
 
       - name: Build SctxConverter
@@ -121,16 +172,38 @@ jobs:
 
           cmake --build build \
             --target SctxConverter \
-            --parallel 2
+            --parallel 2 \
+            --verbose
 
-      - name: Copy WebAssembly files
+      - name: Verify WebAssembly output
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          echo "=== WebAssembly files ==="
+
+          find build \
+            -type f \
+            \( \
+              -name "SctxConverter.js" \
+              -o \
+              -name "SctxConverter.wasm" \
+            \) \
+            -print
+
+          test "$(find build -type f -name "SctxConverter.js" | wc -l)" -gt 0
+
+          test "$(find build -type f -name "SctxConverter.wasm" | wc -l)" -gt 0
+
+      - name: Prepare GitHub Pages site
         shell: bash
         run: |
           set -euxo pipefail
 
           mkdir -p site/wasm
 
-          find build -type f \
+          find build \
+            -type f \
             \( \
               -name "SctxConverter.js" \
               -o \
@@ -138,7 +211,12 @@ jobs:
             \) \
             -exec cp {} site/wasm/ \;
 
+          echo "=== site/wasm ==="
+
+          ls -lh site/wasm
+
           test -f site/wasm/SctxConverter.js
+
           test -f site/wasm/SctxConverter.wasm
 
       - name: Configure GitHub Pages
