@@ -29,7 +29,7 @@ jobs:
           version: latest
           actions-cache-folder: emsdk-cache
 
-      - name: Prepare Workshop Core
+      - name: Clone dependencies
         shell: bash
         run: |
           set -euxo pipefail
@@ -38,15 +38,19 @@ jobs:
             https://github.com/sc-workshop/Workshop-Core.git \
             workshop-core
 
-          test -f workshop-core/workshop-core/cmake/WkFlatbuffers.cmake
-          test -f workshop-core/workshop-core/cmake/WkArgsparse.cmake
-          test -f workshop-core/workshop-core/cmake/WkJson.cmake
+          git clone --depth 1 \
+            https://github.com/sc-workshop/SupercellTexture.git \
+            supercell-texture
 
-      - name: Clone SCTX Converter
-        run: |
           git clone --depth 1 \
             https://github.com/Daniil-SV/SCTX-Converter.git \
             sctx-converter
+
+          test -f workshop-core/workshop-core/cmake/WkFlatbuffers.cmake
+          test -f workshop-core/workshop-core/cmake/WkArgsparse.cmake
+
+          test -f supercell-texture/supercell-texture/sctx_schemas/MipMapData.fbs
+          test -f supercell-texture/supercell-texture/sctx_schemas/Header.fbs
 
       - name: Configure WebAssembly build
         shell: bash
@@ -60,18 +64,43 @@ jobs:
             -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DSC_TEXTURE_BUILD_CLI=ON \
-            -DCMAKE_MODULE_PATH="${GITHUB_WORKSPACE}/workshop-core/workshop-core/cmake"
+            -DCMAKE_MODULE_PATH="${GITHUB_WORKSPACE}/workshop-core/workshop-core/cmake" \
+            -DFETCHCONTENT_SOURCE_DIR_SUPERCELL-TEXTURE="${GITHUB_WORKSPACE}/supercell-texture"
 
-      - name: Generate SCTX FlatBuffers headers
+      - name: Verify SCTX schemas
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          echo "SCTX schemas:"
+          find build/_deps/supercell-texture-src \
+            -type f \
+            \( -name "*.fbs" \) \
+            -print
+
+          test -f \
+            build/_deps/supercell-texture-src/supercell-texture/sctx_schemas/MipMapData.fbs
+
+          test -f \
+            build/_deps/supercell-texture-src/supercell-texture/sctx_schemas/Header.fbs
+
+      - name: Generate SCTX FlatBuffers
         shell: bash
         run: |
           set -euxo pipefail
 
           source "$EMSDK/emsdk_env.sh"
 
-          cmake --build build --target GENERATE_SCTX_API
+          cmake --build build \
+            --target GENERATE_SCTX_API \
+            --parallel 2
 
-          echo "Generated SCTX headers:"
+      - name: Verify generated headers
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          echo "Generated headers:"
           find build -type f \
             \( \
               -name "Header_generated.h" \
