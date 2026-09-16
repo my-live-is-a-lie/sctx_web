@@ -14,11 +14,7 @@ let wasmPromise = null;
 function addLog(text, cls = "") {
   const li = document.createElement("li");
   li.textContent = text;
-
-  if (cls) {
-    li.className = cls;
-  }
-
+  if (cls) li.className = cls;
   log.appendChild(li);
 }
 
@@ -39,54 +35,38 @@ function isPng(data) {
 }
 
 /**
- * Load the WebAssembly module the classic way,
- * because the currently generated file is not an ES Module.
+ * Load modularized Emscripten module
  */
-function loadWasm() {
-  if (wasmModule) {
-    return Promise.resolve(wasmModule);
-  }
+async function loadWasm() {
+  if (wasmModule) return wasmModule;
+  if (wasmPromise) return wasmPromise;
 
-  if (wasmPromise) {
-    return wasmPromise;
-  }
+  wasmPromise = (async () => {
+    const scriptUrl = new URL("./wasm/SctxConverter.js", import.meta.url).href;
 
-  wasmPromise = new Promise((resolve, reject) => {
-    // Prevent the module from auto-running main()
-    window.Module = {
-      noInitialRun: true,
-      noExitRuntime: true,
+    // Dynamic import of the modularized module
+    const module = await import(scriptUrl);
+    const factory = module.default || module.createSctxConverter || module;
 
+    if (typeof factory !== "function") {
+      throw new Error("WebAssembly factory not found");
+    }
+
+    const instance = await factory({
       locateFile(filename) {
         return new URL("./wasm/" + filename, import.meta.url).href;
       },
+      noInitialRun: true,
+      noExitRuntime: true
+    });
 
-      onRuntimeInitialized() {
-        // Make sure FS is available
-        if (!window.Module.FS) {
-          reject(new Error("FS is not available in the WebAssembly module"));
-          return;
-        }
+    if (!instance.FS || typeof instance.callMain !== "function") {
+      throw new Error("FS or callMain is missing from the module");
+    }
 
-        wasmModule = window.Module;
-        resolve(wasmModule);
-      },
-
-      onAbort(reason) {
-        reject(new Error("WebAssembly aborted: " + reason));
-      }
-    };
-
-    const script = document.createElement("script");
-    script.src = new URL("./wasm/SctxConverter.js", import.meta.url).href;
-    script.async = true;
-
-    script.onerror = () => {
-      reject(new Error("Failed to load SctxConverter.js"));
-    };
-
-    document.head.appendChild(script);
-  }).catch(err => {
+    wasmModule = instance;
+    return instance;
+  })().catch(err => {
     wasmPromise = null;
     throw err;
   });
@@ -95,25 +75,15 @@ function loadWasm() {
 }
 
 async function convertOne(file, wasm) {
-  const id =
-    Date.now() +
-    "_" +
-    Math.random().toString(16).slice(2);
-
+  const id = Date.now() + "_" + Math.random().toString(16).slice(2);
   const input = "/input_" + id + ".sctx";
   const output = "/output_" + id + ".png";
 
   try {
     const data = new Uint8Array(await file.arrayBuffer());
 
-    if (!wasm.FS || typeof wasm.FS.writeFile !== "function") {
-      throw new Error("FileSystem (FS) is not available");
-    }
-
-    // Write the file into the virtual filesystem
     wasm.FS.writeFile(input, data);
 
-    // Run: decode input output -t
     const exitCode = wasm.callMain([
       "decode",
       input,
@@ -125,11 +95,10 @@ async function convertOne(file, wasm) {
       throw new Error(`Decoder exited with code ${exitCode}`);
     }
 
-    // Read the resulting PNG
     const png = wasm.FS.readFile(output);
 
     if (!isPng(png)) {
-      throw new Error("Decoder did not produce a valid PNG.");
+      throw new Error("Decoder did not produce a valid PNG");
     }
 
     results.push({
@@ -138,27 +107,18 @@ async function convertOne(file, wasm) {
     });
 
   } finally {
-    // Clean up temporary files
     try { wasm.FS.unlink(input); } catch {}
     try { wasm.FS.unlink(output); } catch {}
   }
 }
 
 fileInput.addEventListener("change", () => {
-  selected = [...fileInput.files]
-    .filter(file => /\.sctx$/i.test(file.name));
-
+  selected = [...fileInput.files].filter(f => /\.sctx$/i.test(f.name));
   results = [];
   log.innerHTML = "";
-
   progress.style.width = "0%";
-
   counter.textContent = `0 / ${selected.length}`;
-
-  current.textContent = selected.length
-    ? `${selected.length} file(s) selected`
-    : "Ready";
-
+  current.textContent = selected.length ? `${selected.length} file(s) selected` : "Ready";
   convertButton.disabled = selected.length === 0;
   downloadAllButton.disabled = true;
 });
@@ -168,7 +128,6 @@ convertButton.addEventListener("click", async () => {
 
   convertButton.disabled = true;
   fileInput.disabled = true;
-
   results = [];
   log.innerHTML = "";
 
@@ -195,7 +154,7 @@ convertButton.addEventListener("click", async () => {
       }
 
       counter.textContent = `${n} / ${selected.length}`;
-      progress.style.width = `${Math.round(n / selected.length * 100)}%`;
+      progress.style.width = `${Math.round((n / selected.length) * 100)}%`;
     }
 
     current.textContent = `Done — ${results.length} PNG(s)`;
@@ -215,17 +174,12 @@ downloadAllButton.addEventListener("click", async () => {
   for (const item of results) {
     const url = URL.createObjectURL(item.blob);
     const a = document.createElement("a");
-
     a.href = url;
     a.download = item.name;
-
     document.body.appendChild(a);
     a.click();
     a.remove();
-
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-
-    // Small delay so the browser doesn't drop downloads
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise(r => setTimeout(r, 150));
   }
 });
