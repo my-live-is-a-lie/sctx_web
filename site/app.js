@@ -35,38 +35,69 @@ function isPng(data) {
 }
 
 /**
- * Load modularized Emscripten module
+ * Load the modularized Emscripten factory via classic script tag
  */
-async function loadWasm() {
-  if (wasmModule) return wasmModule;
-  if (wasmPromise) return wasmPromise;
+function loadWasm() {
+  if (wasmModule) {
+    return Promise.resolve(wasmModule);
+  }
 
-  wasmPromise = (async () => {
-    const scriptUrl = new URL("./wasm/SctxConverter.js", import.meta.url).href;
+  if (wasmPromise) {
+    return wasmPromise;
+  }
 
-    // Dynamic import of the modularized module
-    const module = await import(scriptUrl);
-    const factory = module.default || module.createSctxConverter || module;
-
-    if (typeof factory !== "function") {
-      throw new Error("WebAssembly factory not found");
+  wasmPromise = new Promise((resolve, reject) => {
+    // Already loaded?
+    if (typeof createSctxConverter === "function") {
+      createSctxConverter({
+        locateFile(filename) {
+          return new URL("./wasm/" + filename, import.meta.url).href;
+        },
+        noInitialRun: true,
+        noExitRuntime: true
+      }).then(instance => {
+        if (!instance.FS || typeof instance.callMain !== "function") {
+          reject(new Error("FS or callMain is missing"));
+          return;
+        }
+        wasmModule = instance;
+        resolve(instance);
+      }).catch(reject);
+      return;
     }
 
-    const instance = await factory({
-      locateFile(filename) {
-        return new URL("./wasm/" + filename, import.meta.url).href;
-      },
-      noInitialRun: true,
-      noExitRuntime: true
-    });
+    const script = document.createElement("script");
+    script.src = new URL("./wasm/SctxConverter.js", import.meta.url).href;
+    script.async = true;
 
-    if (!instance.FS || typeof instance.callMain !== "function") {
-      throw new Error("FS or callMain is missing from the module");
-    }
+    script.onload = () => {
+      if (typeof createSctxConverter !== "function") {
+        reject(new Error("createSctxConverter factory not found after loading script"));
+        return;
+      }
 
-    wasmModule = instance;
-    return instance;
-  })().catch(err => {
+      createSctxConverter({
+        locateFile(filename) {
+          return new URL("./wasm/" + filename, import.meta.url).href;
+        },
+        noInitialRun: true,
+        noExitRuntime: true
+      }).then(instance => {
+        if (!instance.FS || typeof instance.callMain !== "function") {
+          reject(new Error("FS or callMain is missing from the module"));
+          return;
+        }
+        wasmModule = instance;
+        resolve(instance);
+      }).catch(reject);
+    };
+
+    script.onerror = () => {
+      reject(new Error("Failed to load SctxConverter.js"));
+    };
+
+    document.head.appendChild(script);
+  }).catch(err => {
     wasmPromise = null;
     throw err;
   });
