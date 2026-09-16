@@ -1,25 +1,29 @@
-# SCTX → PNG Web Converter
+# SCTX → PNG
 
-A free, browser-based tool to convert Supercell `.sctx` texture files to PNG — entirely offline in your browser.
+Convert Supercell `.sctx` textures to PNG — fully offline in your browser.
 
-**[➡️ Open the Converter](https://my-live-is-a-lie.github.io/sctx_web/)**
+<br>
 
----
+<p align="center">
+  <a href="https://my-live-is-a-lie.github.io/sctx_web/">
+    <img src="https://img.shields.io/badge/Open_Converter-2563eb?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Open Converter" height="42">
+  </a>
+</p>
+
+<br>
 
 ### Features
 
-- Convert one or multiple `.sctx` files
-- Upload a `.zip` containing many `.sctx` files
-- All processing happens locally (nothing is uploaded to any server)
-- Download results as a single ZIP file
-- Progress indicator and detailed conversion log
-- Works on desktop and mobile
+- Convert single or multiple `.sctx` files
+- Upload a `.zip` full of `.sctx` files
+- Everything runs locally in the browser (no uploads)
+- Download all results as one ZIP
 
 ---
 
 ### How to use
 
-1. Open the [live demo](https://my-live-is-a-lie.github.io/sctx_web/)
-2. Select `.sctx` files **or** a `.zip` file that contains them
-3. Click **Convert**
-4. Download the resulting PNG(s) as a ZIP
+1. Click the button above
+2. Select `.sctx` files or a `.zip`
+3. Press **Convert**
+4. Download the ZIP
