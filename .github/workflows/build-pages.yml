@@ -72,6 +72,35 @@ jobs:
             -name "*.fbs" \
             -print
 
+      - name: Build native FlatBuffers compiler
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          git clone --depth 1 --branch v25.12.19 \
+            https://github.com/google/flatbuffers.git \
+            flatbuffers-native
+
+          cmake \
+            -S flatbuffers-native \
+            -B flatbuffers-native/build \
+            -DFLATBUFFERS_BUILD_TESTS=OFF \
+            -DFLATBUFFERS_BUILD_GRPCTEST=OFF \
+            -DFLATBUFFERS_BUILD_FLATLIB=OFF \
+            -DFLATBUFFERS_BUILD_CPP17=OFF \
+            -DFLATBUFFERS_BUILD_LEGACY=OFF \
+            -DFLATBUFFERS_BUILD_SHAREDLIB=OFF \
+            -DFLATBUFFERS_BUILD_FLATC=ON
+
+          cmake --build flatbuffers-native/build \
+            --target flatc \
+            --parallel 2
+
+          test -x flatbuffers-native/build/flatc
+
+          echo "Native flatc:"
+          flatbuffers-native/build/flatc --version
+
       - name: Configure WebAssembly build
         shell: bash
         run: |
@@ -85,58 +114,33 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DSC_TEXTURE_BUILD_CLI=ON \
             -DCMAKE_MODULE_PATH="${GITHUB_WORKSPACE}/workshop-core/workshop-core/cmake" \
-            -DFETCHCONTENT_SOURCE_DIR_SUPERCELL_TEXTURE="${GITHUB_WORKSPACE}/supercell-texture"
+            -DFETCHCONTENT_SOURCE_DIR_SUPERCELL_TEXTURE="${GITHUB_WORKSPACE}/supercell-texture" \
+            -DFLATBUFFERS_FLATC_EXECUTABLE="${GITHUB_WORKSPACE}/flatbuffers-native/build/flatc"
 
-      - name: Inspect configured SCTX paths
+      - name: Verify SCTX schemas
         shell: bash
         run: |
           set -euxo pipefail
 
-          echo "=== Source SCTX schemas ==="
+          echo "=== SCTX schemas ==="
 
           find supercell-texture/supercell-texture/sctx_schemas \
             -type f \
             -name "*.fbs" \
             -print
 
-          echo "=== Build directories ==="
+          test -f \
+            supercell-texture/supercell-texture/sctx_schemas/MipMapData.fbs
 
-          find build \
-            -maxdepth 5 \
-            -type d \
-            -iname "*supercell*texture*" \
-            -print
+          test -f \
+            supercell-texture/supercell-texture/sctx_schemas/Header.fbs
 
-          echo "=== MipMapData.fbs locations ==="
-
-          find . \
-            -type f \
-            -name "MipMapData.fbs" \
-            -print
-
-          echo "=== Header.fbs locations ==="
-
-          find . \
-            -type f \
-            -name "Header.fbs" \
-            -print
-
-      - name: Debug SCTX FlatBuffers
+      - name: Generate SCTX FlatBuffers
         shell: bash
         run: |
           set -euxo pipefail
 
-          echo "=== Generated build rules containing MipMapData.fbs ==="
-
-          grep -R -n -A10 -B10 \
-            "MipMapData.fbs" \
-            build/_deps \
-            2>/dev/null \
-            || true
-
           echo "=== Generate SCTX FlatBuffers ==="
-
-          source "$EMSDK/emsdk_env.sh"
 
           cmake --build build \
             --target GENERATE_SCTX_API \
@@ -216,7 +220,6 @@ jobs:
           ls -lh site/wasm
 
           test -f site/wasm/SctxConverter.js
-
           test -f site/wasm/SctxConverter.wasm
 
       - name: Configure GitHub Pages
