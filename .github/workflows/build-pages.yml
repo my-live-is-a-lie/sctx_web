@@ -44,7 +44,7 @@ jobs:
         run: |
           set -euxo pipefail
 
-          # 1. Patch ASTC for Emscripten
+          # 1. Force NONE ISA for ASTC under Emscripten
           ASTC_FILE="supercell-compression/supercell-compression/cmake/astc.cmake"
 
           python3 - "$ASTC_FILE" <<'PY'
@@ -55,7 +55,6 @@ jobs:
           text = path.read_text()
 
           needle = "if(ANDROID)\n"
-
           replacement = """if(EMSCRIPTEN)
               set(ASTCENC_ISA_AVX2 OFF)
               set(ASTCENC_ISA_SSE41 OFF)
@@ -67,50 +66,81 @@ jobs:
           """
 
           if needle not in text:
-              raise SystemExit("ASTC platform block not found")
+              raise SystemExit("ASTC platform block not found in astc.cmake")
 
           path.write_text(text.replace(needle, replacement, 1))
+          print("ASTC patched for Emscripten")
           PY
 
-          # 2. Force local SupercellCompression inside SupercellTexture
-          DEP_FILE="supercell-texture/cmake/dependencies.cmake"
+          # 2. Force local SupercellTexture inside SCTX-Converter
+          DEP_FILE="sctx-converter/cmake/dependencies.cmake"
 
           python3 - "$DEP_FILE" <<'PY'
           from pathlib import Path
           import sys
+          import re
 
           path = Path(sys.argv[1])
           text = path.read_text()
 
-          old = """FetchContent_Declare(
-              supercell-compression
-              GIT_REPOSITORY https://github.com/sc-workshop/SupercellCompression.git
-              GIT_TAG main
+          # Match the FetchContent_Declare block for supercell-texture flexibly
+          pattern = r'''FetchContent_Declare\(\s*
+              supercell-texture\s*
+              GIT_REPOSITORY\s+https://github\.com/sc-workshop/SupercellTexture\s*
+              GIT_TAG\s+main\s*
+          \)\s*
+          FetchContent_MakeAvailable\(supercell-texture\)'''
+
+          replacement = '''FetchContent_Declare(
+              supercell-texture
+              SOURCE_DIR "$ENV{GITHUB_WORKSPACE}/supercell-texture"
           )
+          FetchContent_MakeAvailable(supercell-texture)'''
 
-          FetchContent_MakeAvailable(supercell-compression)"""
+          new_text, count = re.subn(pattern, replacement, text, count=1, flags=re.VERBOSE | re.DOTALL)
 
-          new = """FetchContent_Declare(
+          if count == 0:
+              print("Current content of sctx-converter/cmake/dependencies.cmake:")
+              print(text)
+              raise SystemExit("Could not find supercell-texture FetchContent block")
+
+          path.write_text(new_text)
+          print("SCTX-Converter dependencies patched to use local SupercellTexture")
+          PY
+
+          # 3. Force local SupercellCompression inside SupercellTexture
+          DEP_FILE2="supercell-texture/cmake/dependencies.cmake"
+
+          python3 - "$DEP_FILE2" <<'PY'
+          from pathlib import Path
+          import sys
+          import re
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+
+          pattern = r'''FetchContent_Declare\(\s*
+              supercell-compression\s*
+              GIT_REPOSITORY\s+https://github\.com/sc-workshop/SupercellCompression\.git\s*
+              GIT_TAG\s+main\s*
+          \)\s*
+          FetchContent_MakeAvailable\(supercell-compression\)'''
+
+          replacement = '''FetchContent_Declare(
               supercell-compression
               SOURCE_DIR "$ENV{GITHUB_WORKSPACE}/supercell-compression"
           )
-          FetchContent_MakeAvailable(supercell-compression)"""
+          FetchContent_MakeAvailable(supercell-compression)'''
 
-          if old not in text:
-              # try without extra newlines
-              old2 = """FetchContent_Declare(
-              supercell-compression
-              GIT_REPOSITORY https://github.com/sc-workshop/SupercellCompression.git
-              GIT_TAG main
-          )
-          FetchContent_MakeAvailable(supercell-compression)"""
-              if old2 not in text:
-                  raise SystemExit("SupercellCompression dependency block not found")
-              text = text.replace(old2, new, 1)
-          else:
-              text = text.replace(old, new, 1)
+          new_text, count = re.subn(pattern, replacement, text, count=1, flags=re.VERBOSE | re.DOTALL)
 
-          path.write_text(text)
+          if count == 0:
+              print("Current content of supercell-texture/cmake/dependencies.cmake:")
+              print(text)
+              raise SystemExit("Could not find supercell-compression FetchContent block")
+
+          path.write_text(new_text)
+          print("SupercellTexture dependencies patched to use local SupercellCompression")
           PY
 
       - name: Build native FlatBuffers compiler
@@ -147,7 +177,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DSC_TEXTURE_BUILD_CLI=ON \
             -DCMAKE_MODULE_PATH="${GITHUB_WORKSPACE}/workshop-core/workshop-core/cmake" \
-            -DFETCHCONTENT_SOURCE_DIR_SUPERCELL_TEXTURE="${GITHUB_WORKSPACE}/supercell-texture" \
             -DFLATBUFFERS_FLATC_EXECUTABLE="${GITHUB_WORKSPACE}/flatbuffers-native/build/flatc"
 
       - name: Generate SCTX FlatBuffers
@@ -161,36 +190,43 @@ jobs:
         run: |
           set -euxo pipefail
           source "$EMSDK/emsdk_env.sh"
+
+          echo "=== Checking generated headers ==="
+          find build -name "*_generated.h" -type f || true
+
           cmake --build build --target SctxConverter --parallel 2 --verbose
 
       - name: Verify WebAssembly output
         shell: bash
         run: |
           set -euxo pipefail
-          echo "=== Looking for WASM/JS files ==="
+
+          echo "=== Searching for WASM / JS files ==="
           find build -type f \( -name "*.wasm" -o -name "*.js" -o -name "*.mjs" \) -print
-          # Accept common names
-          test -f build/SctxConverter.js || test -f build/sctx_converter.js || test -f build/sctx-converter.js || \
-            (echo "No JS glue file found" && exit 1)
+
+          # Accept common output names
+          if [ -f build/SctxConverter.js ] || [ -f build/sctx_converter.js ] || [ -f build/sctx-converter.js ]; then
+            echo "Found JS glue file"
+          else
+            echo "ERROR: No JS glue file found"
+            exit 1
+          fi
 
       - name: Prepare GitHub Pages site
         shell: bash
         run: |
           set -euxo pipefail
-          mkdir -p site
 
-          # Copy existing site content if present
-          if [ -d "site" ] && [ "$(ls -A site 2>/dev/null)" ]; then
-            echo "Using existing site/ content"
-          elif [ -d "web" ]; then
-            cp -r web/. site/
-          elif [ -d "public" ]; then
-            cp -r public/. site/
+          mkdir -p site/wasm
+
+          # Keep existing site content if present
+          if [ -d "site" ] && [ "$(ls -A site 2>/dev/null | grep -v wasm || true)" ]; then
+            echo "Keeping existing site content"
           fi
 
-          # Copy the generated WASM files
-          mkdir -p site/wasm
-          find build -type f \( -name "*.wasm" -o -name "*.js" -o -name "*.mjs" \) -exec cp {} site/wasm/ \;
+          # Copy generated WASM artifacts
+          find build -type f \( -name "*.wasm" -o -name "*.js" -o -name "*.mjs" \) \
+            -exec cp -v {} site/wasm/ \;
 
           echo "=== Final site contents ==="
           find site -type f -print
