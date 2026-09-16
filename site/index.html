@@ -13,8 +13,8 @@
     <h1>SCTX → PNG</h1>
 
     <label class="file-picker">
-      <input id="files" type="file" accept=".sctx" multiple>
-      Select SCTX files
+      <input id="files" type="file" accept=".sctx,.zip" multiple>
+      Select SCTX or ZIP files
     </label>
 
     <button id="convert" disabled>
@@ -40,12 +40,17 @@
       <ul id="log"></ul>
     </section>
 
-    <button id="downloadAll" class="secondary" disabled>
-      Download PNGs
-    </button>
-
   </main>
 
+  <!-- Sticky download bar -->
+  <div id="downloadBar" class="download-bar hidden">
+    <button id="downloadAll" class="secondary" disabled>
+      Download ZIP
+    </button>
+  </div>
+
+  <!-- JSZip library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="app.js" type="module"></script>
 </body>
 </html>
