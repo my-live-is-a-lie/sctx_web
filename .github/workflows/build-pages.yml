@@ -34,27 +34,17 @@ jobs:
         run: |
           set -euxo pipefail
 
-          git clone --depth 1 \
-            https://github.com/sc-workshop/Workshop-Core.git \
-            workshop-core
+          git clone --depth 1 https://github.com/sc-workshop/Workshop-Core.git workshop-core
+          git clone --depth 1 https://github.com/sc-workshop/SupercellTexture.git supercell-texture
+          git clone --depth 1 https://github.com/sc-workshop/SupercellCompression.git supercell-compression
+          git clone --depth 1 https://github.com/Daniil-SV/SCTX-Converter.git sctx-converter
 
-          git clone --depth 1 \
-            https://github.com/sc-workshop/SupercellTexture.git \
-            supercell-texture
-
-          git clone --depth 1 \
-            https://github.com/sc-workshop/SupercellCompression.git \
-            supercell-compression
-
-          git clone --depth 1 \
-            https://github.com/Daniil-SV/SCTX-Converter.git \
-            sctx-converter
-
-      - name: Patch SupercellCompression for WebAssembly
+      - name: Patch dependencies for WebAssembly
         shell: bash
         run: |
           set -euxo pipefail
 
+          # 1. Patch ASTC for Emscripten
           ASTC_FILE="supercell-compression/supercell-compression/cmake/astc.cmake"
 
           python3 - "$ASTC_FILE" <<'PY'
@@ -77,24 +67,58 @@ jobs:
           """
 
           if needle not in text:
-              raise SystemExit(
-                  "Could not find the expected ASTC platform block in astc.cmake"
-              )
+              raise SystemExit("ASTC platform block not found")
 
-          text = text.replace(needle, replacement, 1)
-          path.write_text(text)
+          path.write_text(text.replace(needle, replacement, 1))
           PY
 
-          echo "Patched ASTC configuration:"
-          sed -n '1,45p' "$ASTC_FILE"
+          # 2. Force local SupercellCompression inside SupercellTexture
+          DEP_FILE="supercell-texture/cmake/dependencies.cmake"
+
+          python3 - "$DEP_FILE" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+
+          old = """FetchContent_Declare(
+              supercell-compression
+              GIT_REPOSITORY https://github.com/sc-workshop/SupercellCompression.git
+              GIT_TAG main
+          )
+
+          FetchContent_MakeAvailable(supercell-compression)"""
+
+          new = """FetchContent_Declare(
+              supercell-compression
+              SOURCE_DIR "$ENV{GITHUB_WORKSPACE}/supercell-compression"
+          )
+          FetchContent_MakeAvailable(supercell-compression)"""
+
+          if old not in text:
+              # try without extra newlines
+              old2 = """FetchContent_Declare(
+              supercell-compression
+              GIT_REPOSITORY https://github.com/sc-workshop/SupercellCompression.git
+              GIT_TAG main
+          )
+          FetchContent_MakeAvailable(supercell-compression)"""
+              if old2 not in text:
+                  raise SystemExit("SupercellCompression dependency block not found")
+              text = text.replace(old2, new, 1)
+          else:
+              text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
 
       - name: Build native FlatBuffers compiler
         shell: bash
         run: |
           set -euxo pipefail
 
-          git clone --depth 1 \
-            --branch v25.12.19 \
+          git clone --depth 1 --branch v25.12.19 \
             https://github.com/google/flatbuffers.git \
             flatbuffers-native
 
@@ -109,16 +133,12 @@ jobs:
             -DFLATBUFFERS_BUILD_SHAREDLIB=OFF \
             -DFLATBUFFERS_BUILD_FLATC=ON
 
-          cmake \
-            --build flatbuffers-native/build \
-            --target flatc \
-            --parallel 2
+          cmake --build flatbuffers-native/build --target flatc --parallel 2
 
       - name: Configure WebAssembly build
         shell: bash
         run: |
           set -euxo pipefail
-
           source "$EMSDK/emsdk_env.sh"
 
           emcmake cmake \
@@ -128,68 +148,52 @@ jobs:
             -DSC_TEXTURE_BUILD_CLI=ON \
             -DCMAKE_MODULE_PATH="${GITHUB_WORKSPACE}/workshop-core/workshop-core/cmake" \
             -DFETCHCONTENT_SOURCE_DIR_SUPERCELL_TEXTURE="${GITHUB_WORKSPACE}/supercell-texture" \
-            -DFETCHCONTENT_SOURCE_DIR_SUPERCELL_COMPRESSION="${GITHUB_WORKSPACE}/supercell-compression" \
             -DFLATBUFFERS_FLATC_EXECUTABLE="${GITHUB_WORKSPACE}/flatbuffers-native/build/flatc"
 
       - name: Generate SCTX FlatBuffers
         shell: bash
         run: |
           set -euxo pipefail
-
-          cmake \
-            --build build \
-            --target GENERATE_SCTX_API \
-            --parallel 2 \
-            --verbose
+          cmake --build build --target GENERATE_SCTX_API --parallel 2 --verbose
 
       - name: Build SctxConverter
         shell: bash
         run: |
           set -euxo pipefail
-
           source "$EMSDK/emsdk_env.sh"
-
-          cmake \
-            --build build \
-            --target SctxConverter \
-            --parallel 2 \
-            --verbose
+          cmake --build build --target SctxConverter --parallel 2 --verbose
 
       - name: Verify WebAssembly output
         shell: bash
         run: |
           set -euxo pipefail
-
-          echo "Searching for generated WebAssembly files..."
-
-          find build \
-            -type f \
-            \( -name "*.wasm" -o -name "*.js" -o -name "*.mjs" \) \
-            -print
-
-          test -f build/SctxConverter.js || \
-            test -f build/sctx_converter.js || \
-            test -f build/sctx-converter.js
+          echo "=== Looking for WASM/JS files ==="
+          find build -type f \( -name "*.wasm" -o -name "*.js" -o -name "*.mjs" \) -print
+          # Accept common names
+          test -f build/SctxConverter.js || test -f build/sctx_converter.js || test -f build/sctx-converter.js || \
+            (echo "No JS glue file found" && exit 1)
 
       - name: Prepare GitHub Pages site
         shell: bash
         run: |
           set -euxo pipefail
-
           mkdir -p site
 
-          if [ -d "web" ]; then
+          # Copy existing site content if present
+          if [ -d "site" ] && [ "$(ls -A site 2>/dev/null)" ]; then
+            echo "Using existing site/ content"
+          elif [ -d "web" ]; then
             cp -r web/. site/
           elif [ -d "public" ]; then
             cp -r public/. site/
-          else
-            find . -maxdepth 2 -type f \
-              \( -name "index.html" -o -name "*.css" \) \
-              -print
           fi
 
-          echo "Contents of site:"
-          find site -maxdepth 3 -type f -print
+          # Copy the generated WASM files
+          mkdir -p site/wasm
+          find build -type f \( -name "*.wasm" -o -name "*.js" -o -name "*.mjs" \) -exec cp {} site/wasm/ \;
+
+          echo "=== Final site contents ==="
+          find site -type f -print
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
