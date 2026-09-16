@@ -52,29 +52,34 @@ function loadWasm() {
   }
 
   wasmPromise = new Promise((resolve, reject) => {
-    // Create and load the script
-    const script = document.createElement("script");
-    script.src = new URL("./wasm/SctxConverter.js", import.meta.url).href;
-    script.async = true;
-
-    // Configure Module before the script loads
+    // Prevent the module from auto-running main()
     window.Module = {
-      // Help it find the .wasm file
+      noInitialRun: true,
+      noExitRuntime: true,
+
       locateFile(filename) {
         return new URL("./wasm/" + filename, import.meta.url).href;
       },
 
-      // Called when the runtime is ready
       onRuntimeInitialized() {
+        // Make sure FS is available
+        if (!window.Module.FS) {
+          reject(new Error("FS is not available in the WebAssembly module"));
+          return;
+        }
+
         wasmModule = window.Module;
         resolve(wasmModule);
       },
 
-      // Called if loading is aborted
       onAbort(reason) {
         reject(new Error("WebAssembly aborted: " + reason));
       }
     };
+
+    const script = document.createElement("script");
+    script.src = new URL("./wasm/SctxConverter.js", import.meta.url).href;
+    script.async = true;
 
     script.onerror = () => {
       reject(new Error("Failed to load SctxConverter.js"));
@@ -101,11 +106,14 @@ async function convertOne(file, wasm) {
   try {
     const data = new Uint8Array(await file.arrayBuffer());
 
+    if (!wasm.FS || typeof wasm.FS.writeFile !== "function") {
+      throw new Error("FileSystem (FS) is not available");
+    }
+
     // Write the file into the virtual filesystem
     wasm.FS.writeFile(input, data);
 
     // Run: decode input output -t
-    // Note: callMain resets some state, so use it carefully
     const exitCode = wasm.callMain([
       "decode",
       input,
