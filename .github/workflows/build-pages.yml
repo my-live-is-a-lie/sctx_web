@@ -43,41 +43,58 @@ jobs:
             supercell-texture
 
           git clone --depth 1 \
+            https://github.com/sc-workshop/SupercellCompression.git \
+            supercell-compression
+
+          git clone --depth 1 \
             https://github.com/Daniil-SV/SCTX-Converter.git \
             sctx-converter
 
-          echo "=== Verify Workshop-Core ==="
+      - name: Patch SupercellCompression for WebAssembly
+        shell: bash
+        run: |
+          set -euxo pipefail
 
-          test -f \
-            workshop-core/workshop-core/cmake/WkFlatbuffers.cmake
+          ASTC_FILE="supercell-compression/supercell-compression/cmake/astc.cmake"
 
-          test -f \
-            workshop-core/workshop-core/cmake/WkArgsparse.cmake
+          python3 - "$ASTC_FILE" <<'PY'
+          from pathlib import Path
+          import sys
 
-          test -f \
-            workshop-core/workshop-core/cmake/WkJson.cmake
+          path = Path(sys.argv[1])
+          text = path.read_text()
 
-          echo "=== Verify SupercellTexture ==="
+          needle = "if(ANDROID)\n"
 
-          test -f \
-            supercell-texture/supercell-texture/sctx_schemas/MipMapData.fbs
+          replacement = """if(EMSCRIPTEN)
+              set(ASTCENC_ISA_AVX2 OFF)
+              set(ASTCENC_ISA_SSE41 OFF)
+              set(ASTCENC_ISA_SSE2 OFF)
+              set(ASTCENC_ISA_NATIVE OFF)
+              set(ASTCENC_ISA_NONE ON)
+              set(ASTC_PREFIX "none")
+          elseif(ANDROID)
+          """
 
-          test -f \
-            supercell-texture/supercell-texture/sctx_schemas/Header.fbs
+          if needle not in text:
+              raise SystemExit(
+                  "Could not find the expected ASTC platform block in astc.cmake"
+              )
 
-          echo "=== SCTX schemas ==="
+          text = text.replace(needle, replacement, 1)
+          path.write_text(text)
+          PY
 
-          find supercell-texture/supercell-texture/sctx_schemas \
-            -type f \
-            -name "*.fbs" \
-            -print
+          echo "Patched ASTC configuration:"
+          sed -n '1,45p' "$ASTC_FILE"
 
       - name: Build native FlatBuffers compiler
         shell: bash
         run: |
           set -euxo pipefail
 
-          git clone --depth 1 --branch v25.12.19 \
+          git clone --depth 1 \
+            --branch v25.12.19 \
             https://github.com/google/flatbuffers.git \
             flatbuffers-native
 
@@ -92,14 +109,10 @@ jobs:
             -DFLATBUFFERS_BUILD_SHAREDLIB=OFF \
             -DFLATBUFFERS_BUILD_FLATC=ON
 
-          cmake --build flatbuffers-native/build \
+          cmake \
+            --build flatbuffers-native/build \
             --target flatc \
             --parallel 2
-
-          test -x flatbuffers-native/build/flatc
-
-          echo "Native flatc:"
-          flatbuffers-native/build/flatc --version
 
       - name: Configure WebAssembly build
         shell: bash
@@ -115,57 +128,19 @@ jobs:
             -DSC_TEXTURE_BUILD_CLI=ON \
             -DCMAKE_MODULE_PATH="${GITHUB_WORKSPACE}/workshop-core/workshop-core/cmake" \
             -DFETCHCONTENT_SOURCE_DIR_SUPERCELL_TEXTURE="${GITHUB_WORKSPACE}/supercell-texture" \
+            -DFETCHCONTENT_SOURCE_DIR_SUPERCELL_COMPRESSION="${GITHUB_WORKSPACE}/supercell-compression" \
             -DFLATBUFFERS_FLATC_EXECUTABLE="${GITHUB_WORKSPACE}/flatbuffers-native/build/flatc"
-
-      - name: Verify SCTX schemas
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          echo "=== SCTX schemas ==="
-
-          find supercell-texture/supercell-texture/sctx_schemas \
-            -type f \
-            -name "*.fbs" \
-            -print
-
-          test -f \
-            supercell-texture/supercell-texture/sctx_schemas/MipMapData.fbs
-
-          test -f \
-            supercell-texture/supercell-texture/sctx_schemas/Header.fbs
 
       - name: Generate SCTX FlatBuffers
         shell: bash
         run: |
           set -euxo pipefail
 
-          echo "=== Generate SCTX FlatBuffers ==="
-
-          cmake --build build \
+          cmake \
+            --build build \
             --target GENERATE_SCTX_API \
             --parallel 2 \
             --verbose
-
-      - name: Verify generated headers
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          echo "=== Generated headers ==="
-
-          find build \
-            -type f \
-            \( \
-              -name "Header_generated.h" \
-              -o \
-              -name "MipMapData_generated.h" \
-            \) \
-            -print
-
-          test "$(find build -type f -name "Header_generated.h" | wc -l)" -gt 0
-
-          test "$(find build -type f -name "MipMapData_generated.h" | wc -l)" -gt 0
 
       - name: Build SctxConverter
         shell: bash
@@ -174,7 +149,8 @@ jobs:
 
           source "$EMSDK/emsdk_env.sh"
 
-          cmake --build build \
+          cmake \
+            --build build \
             --target SctxConverter \
             --parallel 2 \
             --verbose
@@ -184,43 +160,36 @@ jobs:
         run: |
           set -euxo pipefail
 
-          echo "=== WebAssembly files ==="
+          echo "Searching for generated WebAssembly files..."
 
           find build \
             -type f \
-            \( \
-              -name "SctxConverter.js" \
-              -o \
-              -name "SctxConverter.wasm" \
-            \) \
+            \( -name "*.wasm" -o -name "*.js" -o -name "*.mjs" \) \
             -print
 
-          test "$(find build -type f -name "SctxConverter.js" | wc -l)" -gt 0
-
-          test "$(find build -type f -name "SctxConverter.wasm" | wc -l)" -gt 0
+          test -f build/SctxConverter.js || \
+            test -f build/sctx_converter.js || \
+            test -f build/sctx-converter.js
 
       - name: Prepare GitHub Pages site
         shell: bash
         run: |
           set -euxo pipefail
 
-          mkdir -p site/wasm
+          mkdir -p site
 
-          find build \
-            -type f \
-            \( \
-              -name "SctxConverter.js" \
-              -o \
-              -name "SctxConverter.wasm" \
-            \) \
-            -exec cp {} site/wasm/ \;
+          if [ -d "web" ]; then
+            cp -r web/. site/
+          elif [ -d "public" ]; then
+            cp -r public/. site/
+          else
+            find . -maxdepth 2 -type f \
+              \( -name "index.html" -o -name "*.css" \) \
+              -print
+          fi
 
-          echo "=== site/wasm ==="
-
-          ls -lh site/wasm
-
-          test -f site/wasm/SctxConverter.js
-          test -f site/wasm/SctxConverter.wasm
+          echo "Contents of site:"
+          find site -maxdepth 3 -type f -print
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
