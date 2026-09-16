@@ -83,7 +83,6 @@ jobs:
           path = Path(sys.argv[1])
           text = path.read_text()
 
-          # Match the FetchContent_Declare block for supercell-texture flexibly
           pattern = r'''FetchContent_Declare\(\s*
               supercell-texture\s*
               GIT_REPOSITORY\s+https://github\.com/sc-workshop/SupercellTexture\s*
@@ -202,13 +201,14 @@ jobs:
           set -euxo pipefail
 
           echo "=== Searching for WASM / JS files ==="
-          find build -type f \( -name "*.wasm" -o -name "*.js" -o -name "*.mjs" \) -print
+          find build -type f \( -name "SctxConverter.wasm" -o -name "SctxConverter.js" \) -print
 
-          # Accept common output names
-          if [ -f build/SctxConverter.js ] || [ -f build/sctx_converter.js ] || [ -f build/sctx-converter.js ]; then
-            echo "Found JS glue file"
+          if [ -f build/sctx-converter/SctxConverter.js ] && [ -f build/sctx-converter/SctxConverter.wasm ]; then
+            echo "Found SctxConverter.js and SctxConverter.wasm"
+            ls -lh build/sctx-converter/SctxConverter.*
           else
-            echo "ERROR: No JS glue file found"
+            echo "ERROR: Expected files not found"
+            find build -name "*SctxConverter*" -print
             exit 1
           fi
 
@@ -219,17 +219,11 @@ jobs:
 
           mkdir -p site/wasm
 
-          # Keep existing site content if present
-          if [ -d "site" ] && [ "$(ls -A site 2>/dev/null | grep -v wasm || true)" ]; then
-            echo "Keeping existing site content"
-          fi
+          cp -v build/sctx-converter/SctxConverter.js  site/wasm/
+          cp -v build/sctx-converter/SctxConverter.wasm site/wasm/
 
-          # Copy generated WASM artifacts
-          find build -type f \( -name "*.wasm" -o -name "*.js" -o -name "*.mjs" \) \
-            -exec cp -v {} site/wasm/ \;
-
-          echo "=== Final site contents ==="
-          find site -type f -print
+          echo "=== Final site/wasm contents ==="
+          ls -lh site/wasm/
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
