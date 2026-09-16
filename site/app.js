@@ -1,13 +1,14 @@
 const fileInput = document.querySelector("#files");
 const convertButton = document.querySelector("#convert");
 const downloadAllButton = document.querySelector("#downloadAll");
+const downloadBar = document.querySelector("#downloadBar");
 const progress = document.querySelector("#progress");
 const counter = document.querySelector("#counter");
 const current = document.querySelector("#current");
 const log = document.querySelector("#log");
 
-let selected = [];
-let results = [];
+let selected = [];   // Array of { name, data: Uint8Array }
+let results = [];    // Array of { name, blob }
 let wasmModule = null;
 let wasmPromise = null;
 
@@ -35,7 +36,7 @@ function isPng(data) {
 }
 
 /**
- * Load the modularized Emscripten factory via classic script tag
+ * Load the modularized Emscripten factory
  */
 function loadWasm() {
   if (wasmModule) {
@@ -47,32 +48,9 @@ function loadWasm() {
   }
 
   wasmPromise = new Promise((resolve, reject) => {
-    // Already loaded?
-    if (typeof createSctxConverter === "function") {
-      createSctxConverter({
-        locateFile(filename) {
-          return new URL("./wasm/" + filename, import.meta.url).href;
-        },
-        noInitialRun: true,
-        noExitRuntime: true
-      }).then(instance => {
-        if (!instance.FS || typeof instance.callMain !== "function") {
-          reject(new Error("FS or callMain is missing"));
-          return;
-        }
-        wasmModule = instance;
-        resolve(instance);
-      }).catch(reject);
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = new URL("./wasm/SctxConverter.js", import.meta.url).href;
-    script.async = true;
-
-    script.onload = () => {
+    function initFactory() {
       if (typeof createSctxConverter !== "function") {
-        reject(new Error("createSctxConverter factory not found after loading script"));
+        reject(new Error("createSctxConverter is not a function"));
         return;
       }
 
@@ -90,11 +68,19 @@ function loadWasm() {
         wasmModule = instance;
         resolve(instance);
       }).catch(reject);
-    };
+    }
 
-    script.onerror = () => {
-      reject(new Error("Failed to load SctxConverter.js"));
-    };
+    if (typeof createSctxConverter === "function") {
+      initFactory();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = new URL("./wasm/SctxConverter.js", import.meta.url).href;
+    script.async = true;
+
+    script.onload = () => initFactory();
+    script.onerror = () => reject(new Error("Failed to load SctxConverter.js"));
 
     document.head.appendChild(script);
   }).catch(err => {
@@ -105,15 +91,63 @@ function loadWasm() {
   return wasmPromise;
 }
 
-async function convertOne(file, wasm) {
+/**
+ * Extract .sctx files from a ZIP
+ */
+async function extractSctxFromZip(file) {
+  const zip = await JSZip.loadAsync(file);
+  const items = [];
+
+  const promises = [];
+  zip.forEach((relativePath, zipEntry) => {
+    if (zipEntry.dir) return;
+    if (!/\.sctx$/i.test(relativePath)) return;
+
+    promises.push(
+      zipEntry.async("uint8array").then(data => {
+        // Keep only the filename (not full path)
+        const name = relativePath.split("/").pop();
+        items.push({ name, data });
+      })
+    );
+  });
+
+  await Promise.all(promises);
+  return items;
+}
+
+/**
+ * Read selected files (supports .sctx and .zip)
+ */
+async function readSelectedFiles(fileList) {
+  const items = [];
+
+  for (const file of fileList) {
+    if (/\.zip$/i.test(file.name)) {
+      addLog(`Extracting ZIP: ${file.name}`, "working");
+      const extracted = await extractSctxFromZip(file);
+      if (extracted.length === 0) {
+        addLog(`No .sctx files found in ${file.name}`, "err");
+      } else {
+        addLog(`Found ${extracted.length} .sctx file(s) in ${file.name}`, "ok");
+        items.push(...extracted);
+      }
+    } else if (/\.sctx$/i.test(file.name)) {
+      const data = new Uint8Array(await file.arrayBuffer());
+      items.push({ name: file.name, data });
+    }
+  }
+
+  return items;
+}
+
+async function convertOne(item, wasm) {
   const id = Date.now() + "_" + Math.random().toString(16).slice(2);
   const input = "/input_" + id + ".sctx";
   const output = "/output_" + id + ".png";
 
   try {
-    const data = new Uint8Array(await file.arrayBuffer());
-
-    wasm.FS.writeFile(input, data);
+    wasm.FS.writeFile(input, item.data);
 
     const exitCode = wasm.callMain([
       "decode",
@@ -133,7 +167,7 @@ async function convertOne(file, wasm) {
     }
 
     results.push({
-      name: outputName(file.name),
+      name: outputName(item.name),
       blob: new Blob([png], { type: "image/png" })
     });
 
@@ -143,15 +177,59 @@ async function convertOne(file, wasm) {
   }
 }
 
-fileInput.addEventListener("change", () => {
-  selected = [...fileInput.files].filter(f => /\.sctx$/i.test(f.name));
+/**
+ * Create a ZIP from all results and trigger download
+ */
+async function downloadResultsAsZip() {
+  if (results.length === 0) return;
+
+  const zip = new JSZip();
+
+  for (const item of results) {
+    zip.file(item.name, item.blob);
+  }
+
+  const content = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(content);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = results.length === 1
+    ? results[0].name
+    : `sctx_converted_${results.length}_files.zip`;
+
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+fileInput.addEventListener("change", async () => {
+  selected = [];
   results = [];
   log.innerHTML = "";
   progress.style.width = "0%";
-  counter.textContent = `0 / ${selected.length}`;
-  current.textContent = selected.length ? `${selected.length} file(s) selected` : "Ready";
-  convertButton.disabled = selected.length === 0;
+  downloadBar.classList.add("hidden");
   downloadAllButton.disabled = true;
+
+  current.textContent = "Reading files…";
+
+  try {
+    selected = await readSelectedFiles([...fileInput.files]);
+
+    counter.textContent = `0 / ${selected.length}`;
+    current.textContent = selected.length
+      ? `${selected.length} file(s) ready`
+      : "Ready";
+
+    convertButton.disabled = selected.length === 0;
+  } catch (err) {
+    console.error(err);
+    addLog(`✗ ${err.message || err}`, "err");
+    current.textContent = "Failed to read files";
+    convertButton.disabled = true;
+  }
 });
 
 convertButton.addEventListener("click", async () => {
@@ -161,6 +239,7 @@ convertButton.addEventListener("click", async () => {
   fileInput.disabled = true;
   results = [];
   log.innerHTML = "";
+  downloadBar.classList.add("hidden");
 
   try {
     current.textContent = "Loading decoder…";
@@ -169,19 +248,19 @@ convertButton.addEventListener("click", async () => {
     const wasm = await loadWasm();
 
     for (let i = 0; i < selected.length; i++) {
-      const file = selected[i];
+      const item = selected[i];
       const n = i + 1;
 
       counter.textContent = `${i} / ${selected.length}`;
-      current.textContent = `Converting: ${file.name}`;
-      addLog(`Converting: ${file.name}`, "working");
+      current.textContent = `Converting: ${item.name}`;
+      addLog(`Converting: ${item.name}`, "working");
 
       try {
-        await convertOne(file, wasm);
-        addLog(`✓ ${outputName(file.name)}`, "ok");
+        await convertOne(item, wasm);
+        addLog(`✓ ${outputName(item.name)}`, "ok");
       } catch (error) {
         console.error(error);
-        addLog(`✗ ${file.name} — ${error?.message || error}`, "err");
+        addLog(`✗ ${item.name} — ${error?.message || error}`, "err");
       }
 
       counter.textContent = `${n} / ${selected.length}`;
@@ -189,7 +268,14 @@ convertButton.addEventListener("click", async () => {
     }
 
     current.textContent = `Done — ${results.length} PNG(s)`;
-    downloadAllButton.disabled = results.length === 0;
+
+    if (results.length > 0) {
+      downloadAllButton.disabled = false;
+      downloadBar.classList.remove("hidden");
+      downloadAllButton.textContent = results.length === 1
+        ? "Download PNG"
+        : `Download ZIP (${results.length} files)`;
+    }
 
   } catch (error) {
     console.error(error);
@@ -202,15 +288,18 @@ convertButton.addEventListener("click", async () => {
 });
 
 downloadAllButton.addEventListener("click", async () => {
-  for (const item of results) {
-    const url = URL.createObjectURL(item.blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = item.name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    await new Promise(r => setTimeout(r, 150));
+  downloadAllButton.disabled = true;
+  downloadAllButton.textContent = "Preparing ZIP…";
+
+  try {
+    await downloadResultsAsZip();
+  } catch (err) {
+    console.error(err);
+    addLog(`✗ Failed to create ZIP: ${err.message}`, "err");
+  } finally {
+    downloadAllButton.disabled = false;
+    downloadAllButton.textContent = results.length === 1
+      ? "Download PNG"
+      : `Download ZIP (${results.length} files)`;
   }
 });
