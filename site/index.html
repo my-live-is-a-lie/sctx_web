@@ -21,6 +21,15 @@
       Select SCTX, GLB or ZIP files
     </label>
 
+    <label class="output-option" for="supercellOutput">
+      Supercell GLB output
+      <select id="supercellOutput">
+        <option value="obj" selected>OBJ package (OBJ + MTL)</option>
+        <option value="glb">Standard GLB</option>
+      </select>
+      <small>Applies to Supercell Odin files with an FLA2 chunk.</small>
+    </label>
+
     <button id="convert" disabled>
       Convert
     </button>

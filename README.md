@@ -7,6 +7,7 @@ Browser-side converter for Supercell SCTX textures and GLB models.
 - `.sctx` → `.png` using the original SCTX-Converter WebAssembly build.
 - Standard `.glb` → `.obj` using a local browser-side GLB parser.
 - Supercell Odin `.glb` files with an `FLA2` FlatBuffers chunk are decoded in-browser to standard glTF first, then exported to OBJ.
+- For Supercell Odin files, the interface lets you choose between a standard `.glb` file and an `.obj` package.
 - ZIP input containing `.sctx` and/or `.glb` files.
 - OBJ conversion exports an `.obj`, `.mtl`, and embedded texture files when the GLB contains supported image data.
 - Converted files are downloaded together as a ZIP.

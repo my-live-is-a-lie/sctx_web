@@ -4,6 +4,7 @@ const fileInput = document.querySelector("#files");
 const convertButton = document.querySelector("#convert");
 const downloadAllButton = document.querySelector("#downloadAll");
 const downloadBar = document.querySelector("#downloadBar");
+const supercellOutput = document.querySelector("#supercellOutput");
 const progress = document.querySelector("#progress");
 const counter = document.querySelector("#counter");
 const current = document.querySelector("#current");
@@ -38,6 +39,14 @@ function baseName(name) {
     .split("/")
     .pop()
     .replace(/\.(glb|gltf|sctx)$/i, "");
+}
+
+function isStandardGlb(data) {
+  return data.length >= 20 &&
+    data[0] === 0x67 && data[1] === 0x6c &&
+    data[2] === 0x54 && data[3] === 0x46 &&
+    data[16] === 0x4a && data[17] === 0x53 &&
+    data[18] === 0x4f && data[19] === 0x4e;
 }
 
 function isPng(data) {
@@ -339,7 +348,22 @@ async function convertGlb(item) {
       { locals: { input } }
     ).toJs();
     input.destroy();
-    converted = convertGlbToObj(new Uint8Array(output), item.name);
+    const standardGlb = new Uint8Array(output);
+    if (!isStandardGlb(standardGlb)) {
+      throw new Error("Supercell converter did not produce a standard GLB");
+    }
+
+    if (supercellOutput.value === "glb") {
+      const name = `${baseName(item.name)}.glb`;
+      results.push({
+        name: baseName(item.name),
+        files: [{ name, data: standardGlb }],
+        type: "glb"
+      });
+      return;
+    }
+
+    converted = convertGlbToObj(standardGlb, item.name);
   } else {
     converted = convertGlbToObj(item.data, item.name);
   }
@@ -550,8 +574,10 @@ convertButton.addEventListener("click", async () => {
 
       downloadAllButton.textContent =
         results.some(result => result.type === "obj")
-          ? "Download converted files (ZIP)"
-          : "Download PNGs (ZIP)";
+          ? "Download OBJ files (ZIP)"
+          : results.some(result => result.type === "glb")
+            ? "Download GLB files (ZIP)"
+            : "Download PNGs (ZIP)";
     }
 
   } catch (error) {
@@ -599,8 +625,10 @@ downloadAllButton.addEventListener(
 
       downloadAllButton.textContent =
         results.some(result => result.type === "obj")
-          ? "Download converted files (ZIP)"
-          : "Download PNGs (ZIP)";
+          ? "Download OBJ files (ZIP)"
+          : results.some(result => result.type === "glb")
+            ? "Download GLB files (ZIP)"
+            : "Download PNGs (ZIP)";
     }
   }
 );

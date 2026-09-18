@@ -58,6 +58,32 @@ button,
   display: none;
 }
 
+.output-option {
+  display: block;
+  margin: 0 0 12px;
+  color: #374151;
+  font-weight: 600;
+}
+
+.output-option select {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+}
+
+.output-option small {
+  display: block;
+  margin-top: 5px;
+  color: #6b7280;
+  font-weight: 400;
+}
+
 button {
   background: #2563eb;
   color: #fff;
