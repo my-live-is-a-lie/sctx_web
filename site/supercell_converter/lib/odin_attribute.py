@@ -21,6 +21,11 @@ class OdinAttribute:
 
     def read(self, data: bytes, offset: int) -> np.array:
         match(self.format):
+            case OdinAttributeFormat.PackedUVVector2:
+                # Supercell stores these UVs as two unsigned 16-bit values
+                # with a 32768 unit scale, not glTF's normalized 65535 scale.
+                raw = np.frombuffer(data, dtype=np.uint16, offset=offset, count=2)
+                array = raw.astype(np.float32) / 32768.0
             case OdinAttributeFormat.NormalizedWeightVector:
                 value = np.frombuffer(
                     data, dtype=np.uint32, offset=offset, count=1)[0]
