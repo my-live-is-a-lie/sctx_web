@@ -5,7 +5,8 @@ Browser-side converter for Supercell SCTX textures and GLB models.
 ## Supported
 
 - `.sctx` → `.png` using the original SCTX-Converter WebAssembly build.
-- `.glb` → `.obj` using a local browser-side GLB parser.
+- Standard `.glb` → `.obj` using a local browser-side GLB parser.
+- Supercell Odin `.glb` files with an `FLA2` FlatBuffers chunk are decoded in-browser to standard glTF first, then exported to OBJ.
 - ZIP input containing `.sctx` and/or `.glb` files.
 - OBJ conversion exports an `.obj`, `.mtl`, and embedded texture files when the GLB contains supported image data.
 - Converted files are downloaded together as a ZIP.
@@ -14,7 +15,7 @@ Browser-side converter for Supercell SCTX textures and GLB models.
 
 Conversion happens locally in the browser. No model or texture is uploaded to a conversion server.
 
-The site does not load the GLB converter from `esm.sh` or another runtime CDN. JavaScript dependencies needed by the page are copied into `site/vendor/` by GitHub Actions.
+The site does not upload model data to a conversion server. The standard converter and JavaScript dependencies are copied into `site/` by GitHub Actions. Supercell Odin support loads the Pyodide runtime and its Python packages from the Pyodide CDN on first use; the selected model bytes remain in the browser.
 
 ## SCTX source
 

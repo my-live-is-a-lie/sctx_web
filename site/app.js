@@ -14,6 +14,9 @@ let results = [];
 
 let wasmModule = null;
 let wasmPromise = null;
+let pyodide = null;
+let pyodidePromise = null;
+let supercellConverterPromise = null;
 
 function addLog(text, cls = "") {
   const li = document.createElement("li");
@@ -47,6 +50,78 @@ function isPng(data) {
     data[5] === 0x0a &&
     data[6] === 0x1a &&
     data[7] === 0x0a;
+}
+
+function isSupercellGlb(data) {
+  return data.length >= 20 &&
+    data[0] === 0x67 && data[1] === 0x6c &&
+    data[2] === 0x54 && data[3] === 0x46 &&
+    data[16] === 0x46 && data[17] === 0x4c &&
+    data[18] === 0x41 && data[19] === 0x32;
+}
+
+async function loadSupercellConverter() {
+  if (supercellConverterPromise) return supercellConverterPromise;
+
+  supercellConverterPromise = (async () => {
+    if (!pyodide) {
+      if (!pyodidePromise) {
+        pyodidePromise = new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js";
+          script.onload = async () => {
+            try {
+              resolve(await loadPyodide({
+                indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/"
+              }));
+            } catch (error) {
+              reject(error);
+            }
+          };
+          script.onerror = () => reject(new Error("Failed to load Pyodide"));
+          document.head.appendChild(script);
+        });
+      }
+
+      pyodide = await pyodidePromise;
+      await pyodide.loadPackage(["numpy", "micropip"]);
+      await pyodide.runPythonAsync(
+        "import micropip\nawait micropip.install(['flatbuffers', 'binary-reader'])"
+      );
+
+      const files = [
+        "__init__.py", "convert.py", "lib/__init__.py",
+        "lib/flatbuffer.py", "lib/glTF.py", "lib/gltf_constants.py",
+        "lib/odin.py", "lib/odin_attribute.py", "lib/odin_constants.py",
+        "lib/animation/__init__.py", "lib/animation/continuousPackedReader.py",
+        "lib/animation/flags.py", "lib/animation/packedReader.py",
+        "lib/animation/rawReader.py", "lib/animation/reader.py",
+        "lib/generated/__init__.py", "lib/generated/glTF_generated.py"
+      ];
+
+      for (const file of files) {
+        const response = await fetch(new URL(`./supercell_converter/${file}`, import.meta.url));
+        if (!response.ok) throw new Error(`Failed to load ${file}`);
+        const content = new Uint8Array(await response.arrayBuffer());
+        const target = `/site/supercell_converter/${file}`;
+        pyodide.FS.mkdirTree(target.slice(0, target.lastIndexOf("/")));
+        pyodide.FS.writeFile(target, content);
+      }
+
+      pyodide.runPython(
+        "import sys\nsys.path.insert(0, '/site')\nsys.path.insert(0, '/site/supercell_converter')"
+      );
+      await pyodide.runPythonAsync(
+        "from supercell_converter.convert import convert_supercell_glb"
+      );
+    }
+    return pyodide;
+  })().catch(error => {
+    supercellConverterPromise = null;
+    throw error;
+  });
+
+  return supercellConverterPromise;
 }
 
 /*
@@ -254,7 +329,20 @@ async function convertSctx(item, wasm) {
  * They are kept together in the download ZIP.
  */
 async function convertGlb(item) {
-  const converted = convertGlbToObj(item.data, item.name);
+  let converted;
+
+  if (isSupercellGlb(item.data)) {
+    const runtime = await loadSupercellConverter();
+    const input = runtime.toPy(item.data);
+    const output = runtime.runPython(
+      "convert_supercell_glb(bytes(input))",
+      { locals: { input } }
+    ).toJs();
+    input.destroy();
+    converted = convertGlbToObj(new Uint8Array(output), item.name);
+  } else {
+    converted = convertGlbToObj(item.data, item.name);
+  }
 
   if (!converted || !converted.files || converted.files.length === 0) {
     throw new Error("GLB to OBJ conversion produced no files");
