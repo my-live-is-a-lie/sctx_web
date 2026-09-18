@@ -224,6 +224,26 @@ jobs:
           echo "=== Final site/wasm contents ==="
           ls -lh site/wasm/
 
+
+      - name: Prepare local browser dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          mkdir -p site/vendor
+
+          npm pack jszip@3.10.1 --silent
+          JSZIP_TGZ="$(ls -1t jszip-3.10.1.tgz | head -n 1)"
+          rm -rf jszip-package
+          mkdir jszip-package
+          tar -xzf "$JSZIP_TGZ" -C jszip-package --strip-components=1
+
+          test -f jszip-package/dist/jszip.min.js
+          cp jszip-package/dist/jszip.min.js site/vendor/jszip.min.js
+
+          echo "=== Local browser dependencies ==="
+          ls -lh site/vendor/
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 

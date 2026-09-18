@@ -1,3 +1,5 @@
+import { convertGlbToObj } from "./glb2obj.js";
+
 const fileInput = document.querySelector("#files");
 const convertButton = document.querySelector("#convert");
 const downloadAllButton = document.querySelector("#downloadAll");
@@ -12,9 +14,6 @@ let results = [];
 
 let wasmModule = null;
 let wasmPromise = null;
-
-let assimpModule = null;
-let assimpPromise = null;
 
 function addLog(text, cls = "") {
   const li = document.createElement("li");
@@ -107,38 +106,6 @@ function loadWasm() {
   });
 
   return wasmPromise;
-}
-
-/*
- * Load libassimp only when a GLB file is actually converted.
- *
- * libassimp is an Assimp WebAssembly build that can export OBJ,
- * MTL and associated texture files in the browser.
- */
-async function loadAssimp() {
-  if (assimpModule) {
-    return assimpModule;
-  }
-
-  if (assimpPromise) {
-    return assimpPromise;
-  }
-
-  assimpPromise = import(
-    "https://esm.sh/libassimp@0.3.0?bundle"
-  ).then(module => {
-    if (typeof module.convert !== "function") {
-      throw new Error("libassimp conversion API is unavailable");
-    }
-
-    assimpModule = module;
-    return module;
-  }).catch(error => {
-    assimpPromise = null;
-    throw error;
-  });
-
-  return assimpPromise;
 }
 
 /*
@@ -287,37 +254,13 @@ async function convertSctx(item, wasm) {
  * They are kept together in the download ZIP.
  */
 async function convertGlb(item) {
-  const { convert } = await loadAssimp();
+  const converted = convertGlbToObj(item.data, item.name);
 
-  const result = await convert(
-    {
-      name: item.name,
-      bytes: item.data
-    },
-    {
-      to: "obj",
-      exportOptions: {
-        materials: true
-      }
-    }
-  );
-
-  if (!result || !result.files || result.files.length === 0) {
+  if (!converted || !converted.files || converted.files.length === 0) {
     throw new Error("GLB to OBJ conversion produced no files");
   }
 
-  const files = result.files.map(file => {
-    if (!file || !file.name || !file.bytes) {
-      throw new Error("Invalid file returned by GLB converter");
-    }
-
-    return {
-      name: file.name,
-      data: new Uint8Array(file.bytes)
-    };
-  });
-
-  const objFile = files.find(
+  const objFile = converted.files.find(
     file => /\.obj$/i.test(file.name)
   );
 
@@ -325,11 +268,9 @@ async function convertGlb(item) {
     throw new Error("GLB converter did not produce an OBJ file");
   }
 
-  const modelName = baseName(item.name);
-
   results.push({
-    name: modelName,
-    files,
+    name: converted.name,
+    files: converted.files,
     type: "obj"
   });
 }
@@ -438,7 +379,6 @@ convertButton.addEventListener("click", async () => {
 
   try {
     let wasm = null;
-    let assimp = null;
 
     for (let i = 0; i < selected.length; i++) {
       const item = selected[i];
@@ -477,17 +417,8 @@ convertButton.addEventListener("click", async () => {
           );
 
         } else if (/\.glb$/i.test(item.name)) {
-          if (!assimp) {
-            current.textContent =
-              "Loading GLB → OBJ converter…";
-
-            addLog(
-              "Loading GLB → OBJ WebAssembly converter…",
-              "working"
-            );
-
-            assimp = await loadAssimp();
-          }
+          current.textContent =
+            "Converting GLB → OBJ locally…";
 
           await convertGlb(item);
 
