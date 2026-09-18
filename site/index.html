@@ -3,18 +3,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>SCTX → PNG</title>
+  <title>SCTX → PNG / GLB → OBJ</title>
   <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
   <main class="app">
 
-    <h1>SCTX → PNG</h1>
+    <h1>SCTX → PNG / GLB → OBJ</h1>
+
+    <p class="description">
+      Convert SCTX textures to PNG and GLB models to OBJ locally in your browser.
+    </p>
 
     <label class="file-picker">
-      <input id="files" type="file" accept=".sctx,.zip" multiple>
-      Select SCTX or ZIP files
+      <input id="files" type="file" accept=".sctx,.glb,.zip" multiple>
+      Select SCTX, GLB or ZIP files
     </label>
 
     <button id="convert" disabled>
@@ -42,14 +46,12 @@
 
   </main>
 
-  <!-- Sticky download bar -->
   <div id="downloadBar" class="download-bar hidden">
     <button id="downloadAll" class="secondary" disabled>
-      Download ZIP
+      Download
     </button>
   </div>
 
-  <!-- JSZip library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="app.js" type="module"></script>
 </body>
