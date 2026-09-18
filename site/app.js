@@ -77,11 +77,11 @@ async function loadSupercellConverter() {
       if (!pyodidePromise) {
         pyodidePromise = new Promise((resolve, reject) => {
           const script = document.createElement("script");
-          script.src = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js";
+          script.src = "https://cdn.jsdelivr.net/pyodide/v0.28.2/full/pyodide.js";
           script.onload = async () => {
             try {
               resolve(await loadPyodide({
-                indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/"
+                indexURL: "https://cdn.jsdelivr.net/pyodide/v0.28.2/full/"
               }));
             } catch (error) {
               reject(error);

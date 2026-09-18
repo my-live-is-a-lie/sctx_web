@@ -128,6 +128,14 @@ button:disabled {
   word-break: break-word;
 }
 
+#current.ok {
+  color: #166534;
+}
+
+#current.err {
+  color: #b91c1c;
+}
+
 #log {
   list-style: none;
   padding: 0;
