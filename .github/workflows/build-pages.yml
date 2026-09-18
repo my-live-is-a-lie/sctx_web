@@ -1,7 +1,9 @@
 name: Build and deploy SCTX Web
 
 on:
-  workflow_dispatch:   # Manual only
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read

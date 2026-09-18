@@ -574,7 +574,7 @@ convertButton.addEventListener("click", async () => {
     current.classList.remove("ok", "err");
     current.classList.add(failures > 0 ? "err" : "ok");
     current.textContent = failures > 0
-      ? `Failure — ${results.length} conversion(s)`
+      ? `${failures} failed — Done ${results.length}`
       : `Done — ${results.length} conversion(s)`;
 
     if (results.length > 0) {
