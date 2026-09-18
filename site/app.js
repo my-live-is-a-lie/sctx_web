@@ -95,11 +95,12 @@ async function loadSupercellConverter() {
       pyodide = await pyodidePromise;
       await pyodide.loadPackage(["numpy", "micropip"]);
       await pyodide.runPythonAsync(
-        "import micropip\nawait micropip.install(['flatbuffers', 'binary-reader'])"
+        "import micropip\nawait micropip.install('flatbuffers')"
       );
 
       const files = [
-        "__init__.py", "convert.py", "lib/__init__.py",
+        "__init__.py", "convert.py", "binary_reader/__init__.py",
+        "binary_reader/binary_reader.py", "lib/__init__.py",
         "lib/flatbuffer.py", "lib/glTF.py", "lib/gltf_constants.py",
         "lib/odin.py", "lib/odin_attribute.py", "lib/odin_constants.py",
         "lib/animation/__init__.py", "lib/animation/continuousPackedReader.py",
@@ -343,10 +344,13 @@ async function convertGlb(item) {
   if (isSupercellGlb(item.data)) {
     const runtime = await loadSupercellConverter();
     const input = runtime.toPy(item.data);
-    const output = runtime.runPython(
-      "convert_supercell_glb(bytes(input))",
-      { locals: { input } }
-    ).toJs();
+    runtime.globals.set("supercellInput", input);
+    const outputProxy = runtime.runPython(
+      "convert_supercell_glb(bytes(supercellInput))"
+    );
+    const output = outputProxy.toJs();
+    outputProxy.destroy();
+    runtime.globals.delete("supercellInput");
     input.destroy();
     const standardGlb = new Uint8Array(output);
     if (!isStandardGlb(standardGlb)) {
@@ -535,7 +539,7 @@ convertButton.addEventListener("click", async () => {
           await convertGlb(item);
 
           addLog(
-            `✓ ${baseName(item.name)}.obj`,
+            `✓ ${baseName(item.name)}.${supercellOutput.value === "glb" && isSupercellGlb(item.data) ? "glb" : "obj"}`,
             "ok"
           );
 

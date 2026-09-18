@@ -16,7 +16,7 @@ Browser-side converter for Supercell SCTX textures and GLB models.
 
 Conversion happens locally in the browser. No model or texture is uploaded to a conversion server.
 
-The site does not upload model data to a conversion server. The standard converter and JavaScript dependencies are copied into `site/` by GitHub Actions. Supercell Odin support loads the Pyodide runtime and its Python packages from the Pyodide CDN on first use; the selected model bytes remain in the browser.
+The site does not upload model data to a conversion server. The standard converter and JavaScript dependencies are copied into `site/` by GitHub Actions. Supercell Odin support loads the Pyodide runtime and its NumPy/FlatBuffers packages from the Pyodide CDN on first use; the selected model bytes remain in the browser. The required BinaryReader helper is bundled locally because it is not available as a Pyodide wheel.
 
 ## SCTX source
 
