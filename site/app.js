@@ -489,6 +489,8 @@ convertButton.addEventListener("click", async () => {
 
   results = [];
   log.innerHTML = "";
+  let failures = 0;
+  current.classList.remove("ok", "err");
 
   downloadBar.classList.add("hidden");
   downloadAllButton.disabled = true;
@@ -551,7 +553,7 @@ convertButton.addEventListener("click", async () => {
 
       } catch (error) {
         console.error(error);
-
+        failures += 1;
         addLog(
           `✗ ${item.name} — ${
             error?.message || error
@@ -569,8 +571,11 @@ convertButton.addEventListener("click", async () => {
         )}%`;
     }
 
-    current.textContent =
-      `Done — ${results.length} conversion(s)`;
+    current.classList.remove("ok", "err");
+    current.classList.add(failures > 0 ? "err" : "ok");
+    current.textContent = failures > 0
+      ? `Failure — ${results.length} conversion(s)`
+      : `Done — ${results.length} conversion(s)`;
 
     if (results.length > 0) {
       downloadAllButton.disabled = false;
@@ -592,6 +597,8 @@ convertButton.addEventListener("click", async () => {
       "err"
     );
 
+    current.classList.remove("ok");
+    current.classList.add("err");
     current.textContent =
       "Conversion failed";
 
