@@ -479,6 +479,22 @@ fileInput.addEventListener("change", async () => {
   }
 });
 
+supercellOutput.addEventListener("change", () => {
+  if (fileInput.disabled || selected.length === 0) {
+    return;
+  }
+
+  results = [];
+  log.innerHTML = "";
+  progress.style.width = "0%";
+  counter.textContent = `0 / ${selected.length}`;
+  current.classList.remove("ok", "err");
+  current.textContent = `${selected.length} file(s) ready`;
+  downloadBar.classList.add("hidden");
+  downloadAllButton.disabled = true;
+  convertButton.disabled = false;
+});
+
 convertButton.addEventListener("click", async () => {
   if (!selected.length) {
     return;
